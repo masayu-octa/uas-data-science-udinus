@@ -49,16 +49,44 @@ input_data['last_3_month_purchase'] = st.sidebar.number_input("Frekuensi Pembeli
 input_df = pd.DataFrame([input_data])
 
 if st.button("Prediksi Status Churn"):
-    # Terapkan Preprocessing yang sama seperti saat training
-    input_df[num_cols] = num_imputer.transform(input_df[num_cols])
-    input_df[cat_cols] = cat_imputer.transform(input_df[cat_cols])
+    # 1. Membuat DataFrame dengan kolom yang SAMA PERSIS dengan num_cols + cat_cols yang diharapkan model
+    full_features = num_cols + cat_cols
     
-    input_num_scaled = scaler.transform(input_df[num_cols])
-    input_cat_encoded = encoder.transform(input_df[cat_cols])
+    # Buat DataFrame kosong dengan struktur kolom yang benar
+    prepared_df = pd.DataFrame(columns=full_features)
+    
+    # Isi DataFrame kosong tersebut dengan nilai dari input_data berdasarkan kecocokan nama fitur
+    for col in full_features:
+        standardized_col = col.lower().replace(" ", "").replace("_", "")
+        matched_value = None
+        
+        for input_key, input_val in input_data.items():
+            if input_key.lower().replace(" ", "").replace("_", "") == standardized_col:
+                matched_value = input_val
+                break
+                
+        # Jika ketemu pasangannya masukkan nilainya, jika tidak beri nilai default
+        if matched_value is not None:
+            prepared_df.loc[0, col] = matched_value
+        else:
+            prepared_df.loc[0, col] = 0 if col in num_cols else ""
+
+    # 2. Terapkan tipe data agar sesuai dengan numpy/pandas sebelum transform
+    for col in num_cols:
+        prepared_df[col] = pd.to_numeric(prepared_df[col])
+    for col in cat_cols:
+        prepared_df[col] = prepared_df[col].astype(str)
+
+    # 3. Lakukan Preprocessing menggunakan nama kolom yang sudah dijamin sinkron
+    prepared_df[num_cols] = num_imputer.transform(prepared_df[num_cols])
+    prepared_df[cat_cols] = cat_imputer.transform(prepared_df[cat_cols])
+    
+    input_num_scaled = scaler.transform(prepared_df[num_cols])
+    input_cat_encoded = encoder.transform(prepared_df[cat_cols])
     
     input_final = np.hstack((input_num_scaled, input_cat_encoded))
     
-    # Melakukan Prediksi
+    # 4. Melakukan Prediksi
     prediction = model.predict(input_final)
     prediction_proba = model.predict_proba(input_final)[0][1]
     
