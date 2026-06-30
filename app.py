@@ -17,7 +17,6 @@ st.write("Aplikasi ringkas untuk memprediksi potensi loyalitas pelanggan berdasa
 
 st.sidebar.header("Input Fitur Utama Pelanggan")
 
-# Hanya menampilkan 7 fitur paling penting dan mudah dijelaskan saat presentasi
 input_data = {}
 
 # 1. Fitur Demografi & Profil
@@ -33,17 +32,22 @@ input_data['support_tickets'] = st.sidebar.number_input("Jumlah Komplain (Suppor
 input_data['satisfaction score'] = st.sidebar.slider("Skor Kepuasan (1-5)", 1.0, 5.0, 4.0)
 input_data['total visits'] = st.sidebar.number_input("Total Kunjungan ke Aplikasi", min_value=0, value=10)
 
-
-# --- STRATEGI LATAR BELAKANG ---
-# Mengisi fitur-fitur sisa yang tidak ditampilkan di UI dengan nilai default agar model tidak error
 fitur_sisa_num = {
-    'avg_session_time': 15.0, 'pages_per_session': 3.0, 'email_open_rate': 50.0,
-    'email click rate': 10.0, 'avg_order_value': 25.0, 'marketing_spend_per_user': 10.0,
-    'delivery_delay_days': 0, 'is_premium_user': 0, 'discount used': 0, 
-    'refund_requested': 0, 'last_3_month_purchase': 2, 'nps_score': 7
+    'avg_session_time': 10.0,        # netral (rentang data ~0-20)
+    'pages_per_session': 4.0,        # netral
+    'email_open_rate': 0.4,          # netral, sebelumnya 50 (skala 0-1 di data asli)
+    'email_click_rate': 0.2,         # netral
+    'avg_order_value': 60.0,         # netral, mendekati median
+    'marketing_spend_per_user': 17.0,# netral, mendekati median
+    'delivery_delay_days': 3,        # netral, mendekati median, sebelumnya 0 (terlalu ideal)
+    'is_premium_user': 0,
+    'discount used': 0,
+    'refund_requested': 0,
+    'last_3_month_purchase_freq': 5, 
+    'nps_score': 5                   # netral, sebelumnya 7 (terlalu bagus -> menahan ke arah loyal)
 }
 fitur_sisa_cat = {
-    'gender': 'Male', 'country': 'United States', 'city': 'Unknown', 
+    'gender': 'Male', 'country': 'United States', 'city': 'Unknown',
     'acquisition_channel': 'Organic', 'device_type': 'Mobile', 'payment_method': 'Credit Card'
 }
 
@@ -54,10 +58,12 @@ for k, v in fitur_sisa_cat.items(): input_data[k] = v
 # Mengubah input menjadi DataFrame tunggal
 input_df = pd.DataFrame([input_data])
 
+THRESHOLD_CHURN = 0.40
+
 if st.button("Prediksi Status Churn"):
     full_features = num_cols + cat_cols
     prepared_df = pd.DataFrame(columns=full_features)
-    
+
     for col in full_features:
         standardized_col = col.lower().replace(" ", "").replace("_", "")
         matched_value = None
@@ -75,16 +81,18 @@ if st.button("Prediksi Status Churn"):
 
     prepared_df[num_cols] = num_imputer.transform(prepared_df[num_cols])
     prepared_df[cat_cols] = cat_imputer.transform(prepared_df[cat_cols])
-    
+
     input_num_scaled = scaler.transform(prepared_df[num_cols])
     input_cat_encoded = encoder.transform(prepared_df[cat_cols])
     input_final = np.hstack((input_num_scaled, input_cat_encoded))
-    
-    prediction = model.predict(input_final)
-    prediction_proba = model.predict_proba(input_final)[0][1]
-    
+
+    prediction_proba = model.predict_proba(input_final)[0][1]  # probabilitas churn (kelas 1)
+
     st.subheader("Hasil Prediksi:")
-    if prediction[0] == 1:
+
+    if prediction_proba >= THRESHOLD_CHURN:
         st.error(f"⚠️ Pelanggan Berpotensi CHURN (Berhenti Berlangganan) dengan probabilitas {prediction_proba*100:.2f}%")
     else:
         st.success(f"✅ Pelanggan Berpotensi TETAP AKTIF (Loyal) dengan probabilitas {(1-prediction_proba)*100:.2f}%")
+
+    st.caption(f"Probabilitas churn mentah dari model: {prediction_proba*100:.2f}% | Threshold keputusan: {THRESHOLD_CHURN*100:.0f}%")
